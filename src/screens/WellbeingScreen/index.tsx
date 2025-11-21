@@ -160,7 +160,10 @@ const InvestmentsScreen: React.FC = () => {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: 32 }}
+        showsVerticalScrollIndicator={false}
+      >
         <Title>Bem-estar & humor</Title>
 
         <SummaryContainer>

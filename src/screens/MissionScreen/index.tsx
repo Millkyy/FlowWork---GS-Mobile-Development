@@ -83,22 +83,6 @@ const SimulationScreen: React.FC = () => {
     flowworkStorage.loadMoods(),
   ]);
 
-  const today = getTodayISODate();
-
-  const tasksToday = tasks.filter(
-    (t) => t.createdAt?.slice(0, 10) === today,
-  ).length;
-
-  const missionsToday = missions.filter(
-    (m) => m.createdAt?.slice(0, 10) === today,
-  ).length;
-
-  let lastMoodText = 'Sem registro de humor.';
-  if (moods.length > 0) {
-    const last = moods[moods.length - 1];
-    lastMoodText = moodLabels[last.mood] || last.mood;
-  }
-
   const rawProfileName = profile?.name?.trim();
 
   const isDefaultUserName =
@@ -128,6 +112,35 @@ const SimulationScreen: React.FC = () => {
 
   setName(bestName);
 
+  const today = getTodayISODate();
+
+  const belongsToUser = (owner?: string | null) => {
+    if (!bestName || !owner) return false;
+    return owner.trim().toLowerCase() === bestName.trim().toLowerCase();
+  };
+
+  const tasksToday = tasks.filter(
+    (t) =>
+      belongsToUser(t.memberName) &&
+      t.createdAt?.slice(0, 10) === today,
+  ).length;
+
+  const missionsToday = missions.filter(
+    (m) =>
+      belongsToUser(m.memberName) &&
+      m.createdAt?.slice(0, 10) === today,
+  ).length;
+
+  let lastMoodText = 'Sem registro de humor.';
+  const myMoods = bestName
+    ? moods.filter((m) => belongsToUser(m.memberName))
+    : moods;
+
+  if (myMoods.length > 0) {
+    const last = myMoods[myMoods.length - 1];
+    lastMoodText = moodLabels[last.mood] || last.mood;
+  }
+
   setSummary({
     tasksToday,
     missionsToday,
@@ -151,7 +164,7 @@ const SimulationScreen: React.FC = () => {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
         <QuestionText>
           {name ? `Olá, ${name}!` : 'Olá!'} 👋
         </QuestionText>

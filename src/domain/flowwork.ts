@@ -1,24 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+
+
 export type TeamId = 'vermelha' | 'roxa' | 'azul';
-
-export type WorkTask = {
-  id: string;
-  memberName: string;
-  team: TeamId;
-  description: string;
-  points: number;
-  createdAt: string;
-};
-
-export type WellbeingMission = {
-  id: string;
-  memberName: string;
-  team: TeamId;
-  label: string;
-  points: number;
-  createdAt: string;
-};
 
 export type MoodLevel =
   | 'muito_sobrecarregado'
@@ -27,114 +11,162 @@ export type MoodLevel =
   | 'bem'
   | 'em_flow';
 
+export type WorkTask = {
+  id: string;
+  memberName: string;
+  team: TeamId;
+  description: string;
+  points: number;
+  createdAt?: string; 
+};
+
+export type WellbeingMission = {
+  id: string;
+  memberName: string;
+  team: TeamId;
+  label: string;
+  points: number;
+  createdAt?: string; 
+};
+
 export type MoodCheckin = {
   id: string;
   memberName: string;
   mood: MoodLevel;
-  energy: number; 
+  energy: number;
   note?: string;
   createdAt: string;
 };
 
-const TASKS_KEY = '@flowwork:tasks';
-const MISSIONS_KEY = '@flowwork:missions';
-const MOODS_KEY = '@flowwork:moods';
 
-function parseArray<T>(value: string | null): T[] {
-  if (!value) return [];
+const TASKS_KEY = '@flowwork/tasks';
+const MISSIONS_KEY = '@flowwork/missions';
+const MOODS_KEY = '@flowwork/moods';
+
+
+async function safeGetItem<T>(key: string, fallback: T): Promise<T> {
   try {
-    const data = JSON.parse(value);
-    return Array.isArray(data) ? (data as T[]) : [];
-  } catch {
-    return [];
+    const raw = await AsyncStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw) as T;
+  } catch (e) {
+    console.warn(`Erro lendo ${key} do AsyncStorage`, e);
+    return fallback;
   }
 }
 
-function makeId(): string {
-  return (
-    Date.now().toString(36) + Math.random().toString(36).slice(2)
-  );
+async function safeSetItem<T>(key: string, value: T): Promise<void> {
+  try {
+    await AsyncStorage.setItem(key, JSON.stringify(value));
+  } catch (e) {
+    console.warn(`Erro salvando ${key} no AsyncStorage`, e);
+  }
 }
+
 
 export const flowworkStorage = {
   async loadTasks(): Promise<WorkTask[]> {
-    const raw = await AsyncStorage.getItem(TASKS_KEY);
-    return parseArray<WorkTask>(raw);
+    return safeGetItem<WorkTask[]>(TASKS_KEY, []);
   },
 
-  async saveTasks(items: WorkTask[]): Promise<void> {
-    await AsyncStorage.setItem(TASKS_KEY, JSON.stringify(items));
+  async saveTasks(tasks: WorkTask[]): Promise<void> {
+    return safeSetItem(TASKS_KEY, tasks);
   },
 
-  async addTask(
-    input: Omit<WorkTask, 'id' | 'createdAt'>,
-  ): Promise<WorkTask[]> {
-    const items = await this.loadTasks();
-    const task: WorkTask = {
-      ...input,
-      id: makeId(),
-      createdAt: new Date().toISOString(),
+  async addTask(input: {
+    memberName: string;
+    team: TeamId;
+    description: string;
+    points: number;
+  }): Promise<WorkTask[]> {
+    const tasks = await safeGetItem<WorkTask[]>(TASKS_KEY, []);
+    const now = new Date().toISOString();
+
+    const newTask: WorkTask = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      memberName: input.memberName,
+      team: input.team,
+      description: input.description,
+      points: input.points,
+      createdAt: now,
     };
-    const updated = [...items, task];
-    await this.saveTasks(updated);
+
+    const updated = [...tasks, newTask];
+    await safeSetItem(TASKS_KEY, updated);
     return updated;
   },
 
   async loadMissions(): Promise<WellbeingMission[]> {
-    const raw = await AsyncStorage.getItem(MISSIONS_KEY);
-    return parseArray<WellbeingMission>(raw);
+    return safeGetItem<WellbeingMission[]>(MISSIONS_KEY, []);
   },
 
-  async saveMissions(items: WellbeingMission[]): Promise<void> {
-    await AsyncStorage.setItem(MISSIONS_KEY, JSON.stringify(items));
+  async saveMissions(missions: WellbeingMission[]): Promise<void> {
+    return safeSetItem(MISSIONS_KEY, missions);
   },
 
-  async addMission(
-    input: Omit<WellbeingMission, 'id' | 'createdAt'>,
-  ): Promise<WellbeingMission[]> {
-    const items = await this.loadMissions();
-    const mission: WellbeingMission = {
-      ...input,
-      id: makeId(),
-      createdAt: new Date().toISOString(),
+  async addMission(input: {
+    memberName: string;
+    team: TeamId;
+    label: string;
+    points: number;
+  }): Promise<WellbeingMission[]> {
+    const missions = await safeGetItem<WellbeingMission[]>(
+      MISSIONS_KEY,
+      [],
+    );
+    const now = new Date().toISOString();
+
+    const newMission: WellbeingMission = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      memberName: input.memberName,
+      team: input.team,
+      label: input.label,
+      points: input.points,
+      createdAt: now,
     };
-    const updated = [...items, mission];
-    await this.saveMissions(updated);
+
+    const updated = [...missions, newMission];
+    await safeSetItem(MISSIONS_KEY, updated);
     return updated;
   },
 
   async loadMoods(): Promise<MoodCheckin[]> {
-    const raw = await AsyncStorage.getItem(MOODS_KEY);
-    return parseArray<MoodCheckin>(raw);
+    return safeGetItem<MoodCheckin[]>(MOODS_KEY, []);
   },
 
-  async saveMoods(items: MoodCheckin[]): Promise<void> {
-    await AsyncStorage.setItem(MOODS_KEY, JSON.stringify(items));
-  },
+  async addMood(input: {
+    memberName: string;
+    mood: MoodLevel;
+    energy: number;
+    note?: string;
+  }): Promise<MoodCheckin[]> {
+    const moods = await safeGetItem<MoodCheckin[]>(MOODS_KEY, []);
+    const now = new Date().toISOString();
 
-  async addMood(
-    input: Omit<MoodCheckin, 'id' | 'createdAt'>,
-  ): Promise<MoodCheckin[]> {
-    const items = await this.loadMoods();
-    const mood: MoodCheckin = {
-      ...input,
-      id: makeId(),
-      createdAt: new Date().toISOString(),
+    const newMood: MoodCheckin = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      memberName: input.memberName,
+      mood: input.mood,
+      energy: input.energy,
+      note: input.note,
+      createdAt: now,
     };
-    const updated = [...items, mood];
-    await this.saveMoods(updated);
+
+    const updated = [...moods, newMood];
+    await safeSetItem(MOODS_KEY, updated);
     return updated;
   },
 };
 
 
+
 export type TeamContribution = {
   id: string;
-  team: TeamId;
   memberName: string;
   description: string;
   points: number;
-  createdAt: string;
+  type: 'task' | 'mission';
+  createdAt?: string;
 };
 
 export type TeamRanking = {
@@ -149,37 +181,56 @@ export async function buildTeamRanking(): Promise<TeamRanking[]> {
     flowworkStorage.loadMissions(),
   ]);
 
-  const all: TeamContribution[] = [
-    ...tasks.map((t) => ({
-      id: t.id,
-      team: t.team,
-      memberName: t.memberName,
-      description: t.description,
-      points: t.points,
-      createdAt: t.createdAt,
-    })),
-    ...missions.map((m) => ({
-      id: m.id,
-      team: m.team,
-      memberName: m.memberName,
-      description: m.label,
-      points: m.points,
-      createdAt: m.createdAt,
-    })),
-  ];
+  const baseTeams: TeamId[] = ['vermelha', 'roxa', 'azul'];
 
-  const teams: TeamId[] = ['vermelha', 'roxa', 'azul'];
+  const map = new Map<TeamId, TeamRanking>();
 
-  const ranking: TeamRanking[] = teams.map((team) => {
-    const contributions = all.filter((c) => c.team === team);
-    const totalPoints = contributions.reduce(
-      (sum, c) => sum + c.points,
-      0,
-    );
-    return { team, totalPoints, contributions };
+  baseTeams.forEach((team) => {
+    map.set(team, {
+      team,
+      totalPoints: 0,
+      contributions: [],
+    });
   });
 
-  ranking.sort((a, b) => b.totalPoints - a.totalPoints);
+  for (const t of tasks) {
+    if (!map.has(t.team)) continue;
+    const entry = map.get(t.team)!;
+    entry.totalPoints += t.points || 0;
+    entry.contributions.push({
+      id: t.id,
+      memberName: t.memberName,
+      description: t.description,
+      points: t.points || 0,
+      type: 'task',
+      createdAt: t.createdAt,
+    });
+  }
 
-  return ranking;
+  for (const m of missions) {
+    if (!map.has(m.team)) continue;
+    const entry = map.get(m.team)!;
+    entry.totalPoints += m.points || 0;
+    entry.contributions.push({
+      id: m.id,
+      memberName: m.memberName,
+      description: m.label,
+      points: m.points || 0,
+      type: 'mission',
+      createdAt: m.createdAt,
+    });
+  }
+
+  const rankingArray = Array.from(map.values()).sort(
+    (a, b) => b.totalPoints - a.totalPoints,
+  );
+
+  rankingArray.forEach((r) => {
+    r.contributions.sort((a, b) => {
+      if (!a.createdAt || !b.createdAt) return 0;
+      return a.createdAt.localeCompare(b.createdAt);
+    });
+  });
+
+  return rankingArray;
 }

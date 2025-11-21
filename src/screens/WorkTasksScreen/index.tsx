@@ -1,5 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, FlatList, Platform, ListRenderItem } from 'react-native';
+import {
+  Alert,
+  FlatList,
+  ListRenderItem,
+  Platform,
+} from 'react-native';
 import {
   Screen,
   Title,
@@ -22,7 +27,11 @@ import {
   TeamDropdownItem,
   TeamDropdownItemText,
 } from './styles';
-import { flowworkStorage, WorkTask, TeamId } from '../../domain/flowwork';
+import {
+  flowworkStorage,
+  WorkTask,
+  TeamId,
+} from '../../domain/flowwork';
 import { profileService } from '../ProfileScreen/services/profileService';
 
 type TaskForm = {
@@ -49,67 +58,135 @@ const ClientsScreen: React.FC = () => {
   const [tasks, setTasks] = useState<WorkTask[]>([]);
   const [form, setForm] = useState<TaskForm>(defaultForm);
   const [teamDropdownOpen, setTeamDropdownOpen] = useState(false);
+  const [currentUserName, setCurrentUserName] = useState('');
 
   useEffect(() => {
     (async () => {
-      const profile = await profileService.load();
-      if (profile?.name) {
-        setForm(prev => ({ ...prev, memberName: profile.name }));
+      const [profile, storedTasks] = await Promise.all([
+        profileService.load(),
+        flowworkStorage.loadTasks(),
+      ]);
+
+      const rawProfileName = profile?.name?.trim();
+
+      const isDefaultUserName =
+        rawProfileName &&
+        ['usuário', 'usuario'].includes(
+          rawProfileName.toLowerCase(),
+        );
+
+      let bestName = !isDefaultUserName ? rawProfileName || '' : '';
+
+      if (!bestName) {
+        const lastTaskWithName = [...storedTasks]
+          .reverse()
+          .find(
+            (t) =>
+              t.memberName &&
+              t.memberName.trim().length > 0,
+          );
+
+        bestName = lastTaskWithName?.memberName?.trim() || '';
       }
 
-      const items = await flowworkStorage.loadTasks();
-      setTasks(items);
+      setCurrentUserName(bestName);
+      setForm((prev) => ({
+        ...prev,
+        memberName: bestName || prev.memberName,
+      }));
+      setTasks(storedTasks);
     })();
   }, []);
 
+  const canDeleteTask = (task: WorkTask) => {
+    if (!currentUserName || !task.memberName) return false;
+
+    return (
+      task.memberName.trim().toLowerCase() ===
+      currentUserName.trim().toLowerCase()
+    );
+  };
+
   const handleSave = async () => {
-    if (!form.memberName.trim() || !form.description.trim() || !form.points.trim()) {
-      Alert.alert('Validação', 'Preencha nome, descrição e pontos.');
+    if (
+      !form.memberName.trim() ||
+      !form.description.trim() ||
+      !form.points.trim()
+    ) {
+      Alert.alert(
+        'Validação',
+        'Preencha nome, descrição e pontos.',
+      );
       return;
     }
 
     if (!form.team) {
-      Alert.alert('Validação', 'Selecione sua equipe antes de salvar.');
+      Alert.alert(
+        'Validação',
+        'Selecione sua equipe antes de salvar.',
+      );
       return;
     }
 
     const points = Number(form.points);
     if (Number.isNaN(points) || points <= 0) {
-      Alert.alert('Validação', 'Informe um número de pontos válido.');
+      Alert.alert(
+        'Validação',
+        'Informe um número de pontos válido.',
+      );
       return;
     }
 
-    const updated = await flowworkStorage.addTask({
-      memberName: form.memberName.trim(),
+    const memberName = form.memberName.trim();
+    const newTasks = await flowworkStorage.addTask({
+      memberName,
       team: form.team,
       description: form.description.trim(),
       points,
     });
 
-    setTasks(updated);
-    setForm(prev => ({ ...prev, description: '', points: '' }));
+    setTasks(newTasks);
+    setCurrentUserName(memberName);
+    setForm((prev) => ({
+      ...prev,
+      memberName,
+      description: '',
+      points: '',
+    }));
     setTeamDropdownOpen(false);
   };
 
   const handleClear = () => {
-    setForm(prev => ({ ...prev, description: '', points: '' }));
+    setForm((prev) => ({
+      ...prev,
+      description: '',
+      points: '',
+    }));
   };
 
-  const handleDelete = (task: WorkTask) => {
-  const updated = tasks.filter(t => t.id !== task.id);
+  const handleDelete = async (task: WorkTask) => {
+    if (!canDeleteTask(task)) {
+      return;
+    }
+
+    const updated = tasks.filter((t) => t.id !== task.id);
     setTasks(updated);
-    flowworkStorage.saveTasks(updated);
+    await flowworkStorage.saveTasks(updated);
   };
 
   const renderItem: ListRenderItem<WorkTask> = ({ item }) => (
     <Card>
       <CardTitle>{item.description}</CardTitle>
       <CardSubtitle>
-        {item.memberName} • {teamLabels[item.team]} • {item.points} pts
+        {item.memberName} • {teamLabels[item.team]} •{' '}
+        {item.points} pts
       </CardSubtitle>
-      <DeleteBtn onPress={() => handleDelete(item)}>
-        <BtnTextLight>Excluir</BtnTextLight>
-      </DeleteBtn>
+
+      {canDeleteTask(item) && (
+        <DeleteBtn onPress={() => handleDelete(item)}>
+          <BtnTextLight>Excluir</BtnTextLight>
+        </DeleteBtn>
+      )}
     </Card>
   );
 
@@ -122,13 +199,15 @@ const ClientsScreen: React.FC = () => {
 
       <FlatList
         data={tasks}
-        keyExtractor={item => item.id}
+        keyExtractor={(item) => item.id}
         renderItem={renderItem}
         contentContainerStyle={{ paddingBottom: 220 }}
+        showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <Card>
             <CardSubtitle>
-              Nenhuma tarefa registrada ainda. Use o formulário abaixo para começar.
+              Nenhuma tarefa registrada ainda. Use o formulário
+              abaixo para começar.
             </CardSubtitle>
           </Card>
         }
@@ -141,30 +220,46 @@ const ClientsScreen: React.FC = () => {
           <Input
             placeholder="Seu nome"
             value={form.memberName}
-            onChangeText={text =>
-              setForm(prev => ({ ...prev, memberName: text }))
+            onChangeText={(text) =>
+              setForm((prev) => ({
+                ...prev,
+                memberName: text,
+              }))
             }
           />
         </Row>
 
         <TeamLabel>Equipe</TeamLabel>
-        <TeamSelectButton onPress={() => setTeamDropdownOpen(prev => !prev)}>
-          <TeamSelectText placeholder={!form.team}>{teamText}</TeamSelectText>
+        <TeamSelectButton
+          onPress={() =>
+            setTeamDropdownOpen((prev) => !prev)
+          }
+        >
+          <TeamSelectText placeholder={!form.team}>
+            {teamText}
+          </TeamSelectText>
         </TeamSelectButton>
 
         {teamDropdownOpen && (
           <TeamDropdown>
-            {(['vermelha', 'roxa', 'azul'] as TeamId[]).map(team => (
-              <TeamDropdownItem
-                key={team}
-                onPress={() => {
-                  setForm(prev => ({ ...prev, team }));
-                  setTeamDropdownOpen(false);
-                }}
-              >
-                <TeamDropdownItemText>{teamLabels[team]}</TeamDropdownItemText>
-              </TeamDropdownItem>
-            ))}
+            {(['vermelha', 'roxa', 'azul'] as TeamId[]).map(
+              (team) => (
+                <TeamDropdownItem
+                  key={team}
+                  onPress={() => {
+                    setForm((prev) => ({
+                      ...prev,
+                      team,
+                    }));
+                    setTeamDropdownOpen(false);
+                  }}
+                >
+                  <TeamDropdownItemText>
+                    {teamLabels[team]}
+                  </TeamDropdownItemText>
+                </TeamDropdownItem>
+              ),
+            )}
           </TeamDropdown>
         )}
 
@@ -172,8 +267,11 @@ const ClientsScreen: React.FC = () => {
           <Input
             placeholder="O que foi feito? (ex: resolveu ticket)"
             value={form.description}
-            onChangeText={text =>
-              setForm(prev => ({ ...prev, description: text }))
+            onChangeText={(text) =>
+              setForm((prev) => ({
+                ...prev,
+                description: text,
+              }))
             }
           />
         </Row>
@@ -182,8 +280,17 @@ const ClientsScreen: React.FC = () => {
           <Input
             placeholder="Pontos (ex: 7)"
             value={form.points}
-            keyboardType={Platform.OS === 'android' ? 'numeric' : 'number-pad'}
-            onChangeText={text => setForm(prev => ({ ...prev, points: text }))}
+            keyboardType={
+              Platform.OS === 'android'
+                ? 'numeric'
+                : 'number-pad'
+            }
+            onChangeText={(text) =>
+              setForm((prev) => ({
+                ...prev,
+                points: text,
+              }))
+            }
           />
         </Row>
 

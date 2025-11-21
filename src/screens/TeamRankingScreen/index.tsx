@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator } from 'react-native';
+import { ActivityIndicator, Text } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import {
   Screen,
@@ -24,21 +24,35 @@ const teamLabel: Record<string, string> = {
   azul: 'Equipe azul',
 };
 
-const RecommendationScreen: React.FC = () => {
+const TeamRankingScreen: React.FC = () => {
   const [ranking, setRanking] = useState<TeamRanking[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [expanded, setExpanded] = useState<Record<string, boolean>>(
-    {},
-  );
-
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<
+    Record<string, boolean>
+  >({});
   const isFocused = useIsFocused();
 
-  async function loadRanking() {
-    setLoading(true);
-    const data = await buildTeamRanking();
-    setRanking(data);
-    setLoading(false);
-  }
+  const loadRanking = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const data = await buildTeamRanking();
+
+      const sorted = [...data].sort(
+        (a, b) => b.totalPoints - a.totalPoints,
+      );
+
+      setRanking(sorted);
+    } catch (e) {
+      console.error(e);
+      setError('Não foi possível carregar o ranking.');
+      setRanking([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (isFocused) {
@@ -57,7 +71,7 @@ const RecommendationScreen: React.FC = () => {
     return (
       <Screen>
         <Content>
-          <ActivityIndicator color="#f1835d" />
+          <ActivityIndicator color="#f97316" />
         </Content>
       </Screen>
     );
@@ -68,15 +82,24 @@ const RecommendationScreen: React.FC = () => {
       <Content>
         <Title>Ranking de equipes</Title>
 
+        {error && (
+          <Text style={{ color: '#b91c1c', marginBottom: 8 }}>
+            {error}
+          </Text>
+        )}
+
         {ranking.map((teamRank, index) => {
           const isExpanded = !!expanded[teamRank.team];
 
           return (
             <Card key={teamRank.team}>
-              <CardHeaderRow onPress={() => toggleTeam(teamRank.team)}>
+              <CardHeaderRow
+                onPress={() => toggleTeam(teamRank.team)}
+              >
                 <CardHeaderLeft>
                   <CardHeaderTitle>
-                    {index + 1}º lugar – {teamLabel[teamRank.team]}
+                    {index + 1}º lugar –{' '}
+                    {teamLabel[teamRank.team]}
                   </CardHeaderTitle>
                   <CardHeaderSubtitle>
                     {teamRank.totalPoints} pontos totais
@@ -112,4 +135,4 @@ const RecommendationScreen: React.FC = () => {
   );
 };
 
-export default RecommendationScreen;
+export default TeamRankingScreen;
